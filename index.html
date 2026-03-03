@@ -60,11 +60,14 @@
         <div class="flex flex-wrap items-center gap-4 bg-slate-800 p-3 rounded-xl border border-slate-700">
             <div class="flex items-center gap-2">
                 <label for="cols" class="text-sm text-slate-300 font-medium">Cols:</label>
-                <input type="number" id="cols" min="4" max="15" value="6" class="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-cyan-500">
+                <input type="number" id="cols" min="4" max="15" value="6" oninput="handleDimensionChange('cols')" class="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-cyan-500">
             </div>
+            <button onclick="toggleRatioLock()" id="ratio-lock-btn" class="text-slate-400 hover:text-white transition-colors p-1" title="Lock A4 Ratio">
+                <i id="ratio-lock-icon" class="ph ph-lock-key-open text-xl"></i>
+            </button>
             <div class="flex items-center gap-2">
                 <label for="rows" class="text-sm text-slate-300 font-medium">Rows:</label>
-                <input type="number" id="rows" min="4" max="15" value="8" class="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-cyan-500">
+                <input type="number" id="rows" min="4" max="22" value="8" oninput="handleDimensionChange('rows')" class="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white focus:outline-none focus:border-cyan-500">
             </div>
             <button onclick="generateGrid()" class="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-cyan-500/20">
                 <i class="ph ph-arrows-clockwise text-lg"></i> Rebuild Grid
@@ -170,7 +173,8 @@
         ];
 
         const coreTiles = [
-            { id: 'game_over', name: 'Game Over', icon: 'ph-skull', color: 'bg-zinc-950 text-red-500 border-red-800 shadow-[inset_0_0_15px_rgba(220,38,38,0.5)]' }
+            { id: 'game_over', name: 'Game Over', icon: 'ph-skull', color: 'bg-zinc-950 text-red-500 border-red-800 shadow-[inset_0_0_15px_rgba(220,38,38,0.5)]' },
+            { id: 'play_button', name: 'Play', icon: 'ph-play-circle', color: 'bg-emerald-500 text-white border-emerald-600' }
         ];
 
         // --- State ---
@@ -179,6 +183,8 @@
         let gridData = [];
         let activeTool = { category: 'number', value: 2 }; // Default tool
         let isDragging = false;
+        let a4RatioLocked = false;
+        const A4_RATIO = 1.4142;
 
         // --- Initialization ---
         function init() {
@@ -192,6 +198,33 @@
         }
 
         // --- Core Functions ---
+        function toggleRatioLock() {
+            a4RatioLocked = !a4RatioLocked;
+            const icon = document.getElementById('ratio-lock-icon');
+            
+            if (a4RatioLocked) {
+                icon.className = 'ph ph-lock-key text-xl text-cyan-400';
+                handleDimensionChange('cols'); // enforce immediately
+            } else {
+                icon.className = 'ph ph-lock-key-open text-xl';
+            }
+        }
+
+        function handleDimensionChange(source) {
+            if (!a4RatioLocked) return;
+            
+            let c = parseInt(document.getElementById('cols').value) || 4;
+            let r = parseInt(document.getElementById('rows').value) || 4;
+            
+            if (source === 'cols') {
+                r = Math.round(c * A4_RATIO);
+                document.getElementById('rows').value = r;
+            } else if (source === 'rows') {
+                c = Math.round(r / A4_RATIO);
+                document.getElementById('cols').value = c;
+            }
+        }
+
         function placeDefaultGameOver() {
             const midR = Math.floor(gridRows / 2);
             const midC = Math.floor(gridCols / 2);
@@ -204,7 +237,7 @@
             
             // Constrain
             if (gridCols < 4) gridCols = 4; if (gridCols > 15) gridCols = 15;
-            if (gridRows < 4) gridRows = 4; if (gridRows > 15) gridRows = 15;
+            if (gridRows < 4) gridRows = 4; if (gridRows > 22) gridRows = 22;
             
             document.getElementById('cols').value = gridCols;
             document.getElementById('rows').value = gridRows;
@@ -289,22 +322,28 @@
         function paintCell(r, c) {
             const currentCell = gridData[r][c];
 
-            // Prevent removing or overwriting the Game Over tile with another tool
-            if (currentCell && currentCell.value === 'game_over' && activeTool.value !== 'game_over') {
-                return;
-            }
+            // Check if removing a game_over tile
+            const isTargetGameOver = currentCell && currentCell.value === 'game_over';
+            const isPlacingGameOver = activeTool.value === 'game_over';
 
-            if (activeTool.value === 'game_over') {
-                // Find and clear the existing Game Over tile to effectively "move" it
+            if (isTargetGameOver && !isPlacingGameOver) {
+                // Count existing game_over tiles
+                let gameOverCount = 0;
                 for (let i = 0; i < gridRows; i++) {
                     for (let j = 0; j < gridCols; j++) {
                         if (gridData[i][j] && gridData[i][j].value === 'game_over') {
-                            gridData[i][j] = null;
+                            gameOverCount++;
                         }
                     }
                 }
-                gridData[r][c] = { category: activeTool.category, value: activeTool.value };
-            } else if (activeTool.category === 'eraser') {
+                
+                // Prevent removing the last Game Over tile
+                if (gameOverCount <= 1) {
+                    return; // Cannot remove the last one
+                }
+            }
+
+            if (activeTool.category === 'eraser') {
                 gridData[r][c] = null;
             } else {
                 gridData[r][c] = { category: activeTool.category, value: activeTool.value };
@@ -441,6 +480,7 @@
     </script>
 </body>
 </html>
+
 
 
 
